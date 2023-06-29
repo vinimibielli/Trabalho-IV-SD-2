@@ -6,7 +6,7 @@ module top(
 );
 
 reg [1:0] EA;
-reg [1:0] count;
+reg [2:0] count;
 
 reg [23:0] mantissa_a, mantissa_b;
 reg [47:0] mantissa_soma;
@@ -21,6 +21,9 @@ wire[8:0] expoente_calculo;
 wire complemento;
 reg erro;
 reg [6:0] virgula;
+reg soma;
+reg loop;
+reg [4:0] loopcount;
 
 integer MSB = 38;
 integer LSB;
@@ -51,7 +54,7 @@ begin
                 end
             end
             2'd1 : begin
-                if(count == 2'd3)
+                if(count == 2'd4)
                 begin
                     EA <= 2'd2;
                 end
@@ -68,13 +71,32 @@ end
 
 always @(posedge clock)
 begin
-    if((EA == 2'd0 || EA == 2'd2 || start == 1'b1) && EA != 2'd1)
+    if((EA == 'd0 || EA == 2'd2 || start == 1'b1) && EA != 2'd1)
     begin
-        count = 2'd0;
+        count = 3'd0;
     end
     else
     begin
+        if(loop == 1'b1)
+        begin
+            count <= count;
+        end
+        else
+        begin
         count <= count + 1'd1;
+        end
+    end
+end
+
+always @(posedge clock)
+begin
+    if(loop == 1'b0)
+    begin
+        loopcount = 3'd0;
+    end
+    else
+    begin
+        loopcount <= loopcount + 1'd1;
     end
 end
 
@@ -93,48 +115,26 @@ begin
     begin
         case(count)
         2'd0 : begin //COLOCANDO O VALOR NOS REGISTRADORES
-            mantissa_a <= {1'b1, data_a[22:0]};
-            mantissa_b <= {1'b1, data_b[22:0]};
             expoente_a <= data_a[30:23];
             expoente_b <= data_b[30:23];
             virgula <= 7'd22;
             erro <= 1'b0;
             mantissa_soma <= 48'd0;
-            if(expoente_calculo == 9'd0)
+            if(data_a == 1'b0)
             begin
-                if(mantissa_a > mantissa_b)
-                begin
-                    sinal_o <= data_a[31];
-                end
-                else
-                begin
-                    if(complemento == 1'b1)
-                    begin
-                        sinal_o <= ~data_b[31];
-                    end
-                    else
-                    begin
-                        sinal_o <= data_b[31];
-                    end
-                end
+                mantissa_a <= {1'b1, data_a[22:0]};
             end
             else
             begin
-                if(expoente_a > expoente_b)
-                begin
-                    sinal_o <= data_a[31];
-                end
-                else
-                begin
-                    if(complemento == 1'b1)
-                    begin
-                        sinal_o <= ~data_b[31];
-                    end
-                    else
-                    begin
-                        sinal_o <= data_b[31];
-                    end
-                end
+                mantissa_a <= {1'b0, ~data_a[22:0] + 1'b1};
+            end
+            if(data_b == 1'b0)
+            begin
+                mantissa_b <= {1'b1, data_b[22:0]};
+            end
+            else
+            begin
+                mantissa_b <= {1'b0, ~data_b[22:0] + 1'b1};
             end
         end
         2'd1 : begin //EXECUÇÃO DA PRÉ-SOMA
@@ -143,12 +143,12 @@ begin
                 if(expoente_a > expoente_b)
                 begin
                     mantissa_soma <= {1'b0, mantissa_a, 23'd0};
-                    virgula <= virgula + 7'd23;
+                    expoente_o <= expoente_a;
                 end
                 else
                 begin
                     mantissa_soma <= {1'b0, mantissa_b, 23'd0};
-                    virgula <= virgula + 7'd23;
+                    expoente_o <= expoente_b;
                 end
             end
             else if(expoente_calculo <= 9'd23 && expoente_calculo != 9'd0)
@@ -156,7 +156,7 @@ begin
                 if(expoente_a > expoente_b)
                 begin
                     mantissa_soma <= mantissa_a << expoente_calculo;
-                    virgula <= virgula + expoente_calculo;
+                    expoente_o <= expoente_a;
                     if(complemento == 1'b1)
                     begin
                         erro = mantissa_b_inv[expoente_calculo];
@@ -169,8 +169,8 @@ begin
                 else
                 begin
                     mantissa_soma <= mantissa_b << expoente_calculo;
-                    virgula <= virgula + expoente_calculo;
                     erro = mantissa_a[expoente_calculo];
+                    expoente_o <= expoente_b;
                 end
             end
             else
@@ -179,28 +179,75 @@ begin
             end
         end
         2'd2 : begin //SOMA
-            //MSB = $bitstoreal(virgula);
-            LSB = $rtoi($bitstoreal(virgula)) - 23'd23;
+
             if(complemento == 1'b1)
             begin
-                mantissa_soma[47:24] <= mantissa_soma + 24'h7FFFFF;
+                if(op == 1'b0)
+                begin
+                mantissa_soma[47:24] <= mantissa_soma + 24'hFFFFFF;
                 mantissa_soma[23:0] <= mantissa_soma[23:0] + (~mantissa_b + 1'b1);
+                else
+                begin
+                mantissa_soma[47:24] <= mantissa_soma - 24'hFFFFFF;
+                mantissa_soma[23:0] <= mantissa_soma[23:0] - (~mantissa_b + 1'b1);
+                else
+                end
+            end
             end
             else
             begin
+                if(op == 1'b0)
+                begin
                 mantissa_soma <= mantissa_soma + mantissa_b;
+                end
+                else
+                begin
+                mantissa_soma <= mantissa_soma - mantissa_b; 
+                end
             end
         end
-        2'd3 : begin //AJUSTE DOS ERROS
-            if(mantissa_soma[40] == 1'b1)
+        2'd3 : begin //ACHAR O SINAL DO PONTO FLUTUANTE
+        if(mantissa_soma[47] == 1'b1)
+        begin
+            sinal_o <= 1'b1;
+            mantissa_soma <= ~mantissa_soma + 1'b1;
+        end
+        else
+        begin
+            sinal_o <= 1'b0;
+        end
+            
+        end
+        2'd4 : begin //ACHAR O EXPOENTE
+        if(|mantissa_soma[46:24] == 1'b1)
             begin
-                //mantissa_o <= mantissa_soma[virgula: (virgula - 7'd21)];
-                virgula <= virgula + 7'd1;
+                loop <= 1'b1;
+                soma <= 1'b1;
+                mantissa_soma >> 1;
             end
             else
             begin
-                mantissa_o <= mantissa_soma[MSB:16];
+            if(|mantissa_soma[22:0] == 1'b1)
+            begin
+                loop <= 1'b1;
+                mantissa_soma << 1;
             end
+            end
+            else
+            begin
+                loop <= 1'b0;
+            end
+        end
+        2'd5 : begin //CORRIGIR O EXPOENTE
+        if(soma == 1'b1)
+        begin
+            expoente_o <= expoente_o + loopcount;
+        end
+        else
+        begin
+            expoente_o <= expoente_o - loopcount;
+        end
+        mantissa_o <= mantissa_soma[22:0];
         end
         endcase
     end

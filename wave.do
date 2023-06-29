@@ -1,19 +1,19 @@
 onerror {resume}
 quietly WaveActivateNextPane {} 0
-add wave -noupdate -divider {TOP}
+add wave -noupdate -divider TOP
 add wave -noupdate /tb/DUT/reset
 add wave -noupdate /tb/DUT/clock
 add wave -noupdate /tb/DUT/start
 add wave -noupdate /tb/DUT/EA
 add wave -noupdate /tb/DUT/count
+add wave -noupdate /tb/DUT/loop
+add wave -noupdate /tb/DUT/loopcount
 add wave -noupdate /tb/DUT/data_a
 add wave -noupdate /tb/DUT/data_b
 add wave -noupdate /tb/DUT/op
-add wave -noupdate -divider {DADOS}
+add wave -noupdate -divider DADOS
 add wave -noupdate /tb/DUT/mantissa_a
-add wave -noupdate /tb/DUT/mantissa_a_inv_wire
 add wave -noupdate /tb/DUT/mantissa_b
-add wave -noupdate /tb/DUT/mantissa_b_inv_wire
 add wave -noupdate /tb/DUT/expoente_a
 add wave -noupdate /tb/DUT/expoente_b
 add wave -noupdate /tb/DUT/expoente_calculo
@@ -22,13 +22,10 @@ add wave -noupdate /tb/DUT/erro
 add wave -noupdate /tb/DUT/mantissa_o
 add wave -noupdate /tb/DUT/expoente_o
 add wave -noupdate /tb/DUT/sinal_o
-add wave -noupdate -divider {SAÍDA}
+add wave -noupdate -divider SAÃDA
 add wave -noupdate /tb/DUT/data_o
 add wave -noupdate /tb/DUT/busy
 add wave -noupdate /tb/DUT/ready
-add wave -noupdate /tb/DUT/complemento
-add wave -noupdate /tb/DUT/virgula
-
 
 TreeUpdate [SetDefaultTree]
 WaveRestoreCursors {{Cursor 1} {0 ns} 0}
@@ -47,4 +44,4 @@ configure wave -griddelta 40
 configure wave -timeline 0
 configure wave -timelineunits ns
 update
-WaveRestoreZoom {0 ns} {1800 ns}
+WaveRestoreZoom {90 ns} {1890 ns}

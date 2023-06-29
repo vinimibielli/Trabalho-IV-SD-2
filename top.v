@@ -198,11 +198,11 @@ begin
         
         end
         3'd3 : begin //SOMA
-        if(expoente_a > expoente_b)
+        if(expoente_a > expoente_b && expoente_calculo < 8'd23)
         begin
             erro <= mantissa_b[expoente_calculo];
         end
-        else
+        else if (expoente_calculo < 8'd23)
         begin
             erro <= mantissa_a[expoente_calculo];
         end

@@ -1,0 +1,218 @@
+module top(
+    input start, op, reset, clock,
+    input [31:0] data_a, data_b,
+    output busy, ready,
+    output [31:0] data_o
+);
+
+reg [1:0] EA;
+reg [1:0] count;
+
+reg [23:0] mantissa_a, mantissa_b;
+reg [47:0] mantissa_soma;
+reg [8:0] expoente_a, expoente_b;
+
+reg sinal_o;
+reg [7:0] expoente_o;
+reg [22:0] mantissa_o;
+
+wire [23:0] mantissa_b_inv;
+wire[8:0] expoente_calculo;
+wire complemento;
+reg erro;
+reg [6:0] virgula;
+
+integer MSB = 38;
+integer LSB;
+
+
+//--------------------------------------//
+//         MÁQUINA DE ESTADOS           //
+//--------------------------------------//
+
+//LEGENDA:
+//2'd0 : IDLE
+//2'd1 : OPERAÇÃO
+//2'd2 : READY
+
+always @(posedge clock or posedge reset)
+begin
+    if(reset == 1'b1)
+    begin
+        EA <= 2'd0;
+    end
+    else
+    begin
+        case(EA)
+            2'd0 : begin
+                if(start == 1'b1)
+                begin
+                    EA <= 2'd1;
+                end
+            end
+            2'd1 : begin
+                if(count == 2'd3)
+                begin
+                    EA <= 2'd2;
+                end
+            end
+            2'd2 : begin
+                if(ready == 1'b1)
+                begin
+                    EA <= 2'd0;
+                end
+            end
+        endcase   
+    end
+end
+
+always @(posedge clock)
+begin
+    if((EA == 2'd0 || EA == 2'd2 || start == 1'b1) && EA != 2'd1)
+    begin
+        count = 2'd0;
+    end
+    else
+    begin
+        count <= count + 1'd1;
+    end
+end
+
+always @(posedge clock or posedge reset)
+begin
+    if(reset == 1'b1)
+    begin
+        mantissa_a <= 23'd0;
+        mantissa_b <= 23'd0;
+        mantissa_o <= 23'd0;
+        expoente_a <= 8'd0;
+        expoente_b <= 8'd0;
+        expoente_o <= 8'd0;
+    end
+    else
+    begin
+        case(count)
+        2'd0 : begin //COLOCANDO O VALOR NOS REGISTRADORES
+            mantissa_a <= {1'b1, data_a[22:0]};
+            mantissa_b <= {1'b1, data_b[22:0]};
+            expoente_a <= data_a[30:23];
+            expoente_b <= data_b[30:23];
+            virgula <= 7'd22;
+            erro <= 1'b0;
+            mantissa_soma <= 48'd0;
+            if(expoente_calculo == 9'd0)
+            begin
+                if(mantissa_a > mantissa_b)
+                begin
+                    sinal_o <= data_a[31];
+                end
+                else
+                begin
+                    if(complemento == 1'b1)
+                    begin
+                        sinal_o <= ~data_b[31];
+                    end
+                    else
+                    begin
+                        sinal_o <= data_b[31];
+                    end
+                end
+            end
+            else
+            begin
+                if(expoente_a > expoente_b)
+                begin
+                    sinal_o <= data_a[31];
+                end
+                else
+                begin
+                    if(complemento == 1'b1)
+                    begin
+                        sinal_o <= ~data_b[31];
+                    end
+                    else
+                    begin
+                        sinal_o <= data_b[31];
+                    end
+                end
+            end
+        end
+        2'd1 : begin //EXECUÇÃO DA PRÉ-SOMA
+            if(expoente_calculo > 9'd23)
+            begin
+                if(expoente_a > expoente_b)
+                begin
+                    mantissa_soma <= {1'b0, mantissa_a, 23'd0};
+                    virgula <= virgula + 7'd23;
+                end
+                else
+                begin
+                    mantissa_soma <= {1'b0, mantissa_b, 23'd0};
+                    virgula <= virgula + 7'd23;
+                end
+            end
+            else if(expoente_calculo <= 9'd23 && expoente_calculo != 9'd0)
+            begin
+                if(expoente_a > expoente_b)
+                begin
+                    mantissa_soma <= mantissa_a << expoente_calculo;
+                    virgula <= virgula + expoente_calculo;
+                    if(complemento == 1'b1)
+                    begin
+                        erro = mantissa_b_inv[expoente_calculo];
+                    end
+                    else
+                    begin
+                        erro = mantissa_b[expoente_calculo];
+                    end
+                end
+                else
+                begin
+                    mantissa_soma <= mantissa_b << expoente_calculo;
+                    virgula <= virgula + expoente_calculo;
+                    erro = mantissa_a[expoente_calculo];
+                end
+            end
+            else
+            begin
+                mantissa_soma <= mantissa_a;
+            end
+        end
+        2'd2 : begin //SOMA
+            //MSB = $bitstoreal(virgula);
+            LSB = $rtoi($bitstoreal(virgula)) - 23'd23;
+            if(complemento == 1'b1)
+            begin
+                mantissa_soma[47:24] <= mantissa_soma + 24'h7FFFFF;
+                mantissa_soma[23:0] <= mantissa_soma[23:0] + (~mantissa_b + 1'b1);
+            end
+            else
+            begin
+                mantissa_soma <= mantissa_soma + mantissa_b;
+            end
+        end
+        2'd3 : begin //AJUSTE DOS ERROS
+            if(mantissa_soma[40] == 1'b1)
+            begin
+                //mantissa_o <= mantissa_soma[virgula: (virgula - 7'd21)];
+                virgula <= virgula + 7'd1;
+            end
+            else
+            begin
+                mantissa_o <= mantissa_soma[MSB:16];
+            end
+        end
+        endcase
+    end
+end
+
+assign expoente_calculo = (expoente_a > expoente_b) ? expoente_a - expoente_b : (expoente_b > expoente_a) ? expoente_b - expoente_a : 8'd0;
+assign data_o[31] = (EA == 2'd2) ? sinal_o : 1'b0;
+assign data_o[30:23] = (EA == 2'd2) ? expoente_o : 8'd0;
+assign data_o[22:0] = (EA == 2'd2 && complemento == 1'b1) ? mantissa_o - erro : (EA == 2'd2 && complemento == 1'b0) ? mantissa_o + erro : 8'd0;
+assign busy = (EA == 2'd1) ? 1'b1 : 1'b0;
+assign ready = (EA == 2'd2) ? 1'b1 : 1'b0;
+assign complemento = ((op == 1'b1 && data_a[31] == data_b[31]) || (op == 1'b0 && data_a[31] != data_b[31])) ? 1'b1 : 1'b0;
+assign mantissa_b_inv = ~mantissa_b + 1'b1;
+
+endmodule
